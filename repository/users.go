@@ -10,7 +10,14 @@ import (
 
 const UsersCollection = "users"
 
-type UsersRepository interface{}
+type UsersRepository interface {
+	Save(user *models.User) error
+	Update(user *models.User) error
+	GetById(id string) (user *models.User, err error)
+	GetByEmail(email string) (user *models.User, err error)
+	GetAll() (users []*models.User, err error)
+	Delete(id string) error
+}
 
 type usersRepository struct {
 	c *mgo.Collection
