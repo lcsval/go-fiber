@@ -22,6 +22,8 @@ type AuthController interface {
 	SignUp(ctx *fiber.Ctx) error
 	SignIn(ctx *fiber.Ctx) error
 	GetUser(ctx *fiber.Ctx) error
+	PutUser(ctx *fiber.Ctx) error
+	DeleteUser(ctx *fiber.Ctx) error
 }
 
 type authController struct {
@@ -105,7 +107,7 @@ func (c *authController) SignIn(ctx *fiber.Ctx) error {
 }
 
 func (c *authController) GetUser(ctx *fiber.Ctx) error {
-	payload, err := AuthRequestWithWith(ctx)
+	payload, err := AuthRequestWithId(ctx)
 	if err != nil {
 		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(err))
 	}
@@ -116,7 +118,60 @@ func (c *authController) GetUser(ctx *fiber.Ctx) error {
 	return ctx.Status(http.StatusOK).JSON(user)
 }
 
-func AuthRequestWithWith(ctx *fiber.Ctx) (*jwt.StandardClaims, error) {
+func (c *authController) PutUser(ctx *fiber.Ctx) error {
+	payload, err := AuthRequestWithId(ctx)
+	if err != nil {
+		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(err))
+	}
+
+	var update models.User
+	err = ctx.BodyParser(&update)
+	if err != nil {
+		return ctx.Status(http.StatusUnprocessableEntity).JSON(util.NewJError(err))
+	}
+
+	update.Email = util.NormalizeEmail(update.Email)
+	if !govalidator.IsEmail(update.Email) {
+		return ctx.Status(http.StatusBadRequest).JSON(util.NewJError(util.ErrInvalidEmail))
+	}
+
+	exists, err := c.usersRepo.GetByEmail(update.Email)
+	if err == mgo.ErrNotFound || exists.Id.Hex() == payload.Id {
+		user, err := c.usersRepo.GetById(payload.Id)
+		if err != nil {
+			return ctx.Status(http.StatusBadRequest).JSON(util.NewJError(err))
+		}
+
+		user.Email = update.Email
+		user.UpdatedAt = time.Now()
+		err = c.usersRepo.Update(user)
+		if err != nil {
+			return ctx.Status(http.StatusUnprocessableEntity).JSON(util.NewJError(err))
+		}
+		return ctx.Status(http.StatusOK).JSON(user)
+	}
+
+	if exists != nil {
+		err = util.ErrEmailAlreadyExists
+	}
+
+	return ctx.Status(http.StatusBadRequest).JSON(util.NewJError(err))
+}
+
+func (c *authController) DeleteUser(ctx *fiber.Ctx) error {
+	payload, err := AuthRequestWithId(ctx)
+	if err != nil {
+		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(err))
+	}
+	err = c.usersRepo.Delete(payload.Id)
+	if err != nil {
+		return ctx.Status(http.StatusInternalServerError).JSON(util.NewJError(err))
+	}
+	ctx.Set("Entity", payload.Id)
+	return ctx.SendStatus(http.StatusNoContent)
+}
+
+func AuthRequestWithId(ctx *fiber.Ctx) (*jwt.StandardClaims, error) {
 	id := ctx.Params("id")
 	if !bson.IsObjectIdHex(id) {
 		return nil, util.ErrUnauthorized
