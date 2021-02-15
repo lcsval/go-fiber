@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/form3tech-oss/jwt-go"
 	"github.com/gofiber/fiber/v2"
 	"gopkg.in/asaskevich/govalidator.v9"
 	"gopkg.in/mgo.v2"
@@ -18,6 +19,9 @@ import (
 )
 
 type AuthController interface {
+	SignUp(ctx *fiber.Ctx) error
+	SignIn(ctx *fiber.Ctx) error
+	GetUser(ctx *fiber.Ctx) error
 }
 
 type authController struct {
@@ -79,19 +83,19 @@ func (c *authController) SignIn(ctx *fiber.Ctx) error {
 	user, err := c.usersRepo.GetByEmail(input.Email)
 	if err != nil {
 		log.Printf("%s signin failed: %v\n", input.Email, err.Error())
-		return ctx.Status(http.StatusUnprocessableEntity).JSON(util.NewJError(util.ErrInvalidCredentials))
+		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(util.ErrInvalidCredentials))
 	}
 
 	err = security.VerifyPassword(user.Password, input.Password)
 	if err != nil {
 		log.Printf("%s signin failed: %v\n", input.Email, err.Error())
-		return ctx.Status(http.StatusUnprocessableEntity).JSON(util.NewJError(err))
+		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(util.ErrInvalidCredentials))
 	}
 
 	token, err := security.NewToken(user.Id.Hex())
 	if err != nil {
 		log.Printf("%s signin failed: %v\n", input.Email, err.Error())
-		return ctx.Status(http.StatusUnprocessableEntity).JSON(util.NewJError(err))
+		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(err))
 	}
 
 	return ctx.Status(http.StatusOK).JSON(fiber.Map{
@@ -105,7 +109,7 @@ func (c *authController) GetUser(ctx *fiber.Ctx) error {
 	if err != nil {
 		return ctx.Status(http.StatusUnauthorized).JSON(util.NewJError(err))
 	}
-	user, err := c.usersRepo.GetById(payload.id)
+	user, err := c.usersRepo.GetById(payload.Id)
 	if err != nil {
 		return ctx.Status(http.StatusInternalServerError).JSON(util.NewJError(err))
 	}

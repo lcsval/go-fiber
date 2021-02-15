@@ -1,7 +1,10 @@
 package main
 
 import (
+	"go-fiber/controllers"
 	"go-fiber/db"
+	"go-fiber/repository"
+	"go-fiber/routes"
 	"log"
 	"net/http"
 
@@ -26,5 +29,11 @@ func main() {
 	app.Get("/", func(ctx *fiber.Ctx) error {
 		return ctx.Status(http.StatusOK).JSON(fiber.Map{"message": "Hello World"})
 	})
+
+	usersRepo := repository.NewUsersRepository(conn)
+	authController := controllers.NewAuthController(usersRepo)
+	authRoutes := routes.NewAuthRoutes(authController)
+	authRoutes.Install(app)
+
 	log.Fatal(app.Listen(":8080"))
 }
